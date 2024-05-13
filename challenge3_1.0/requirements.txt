@@ -1,0 +1,3 @@
+pycatan==1.0.1
+psutil==5.9.8
+tqdm
