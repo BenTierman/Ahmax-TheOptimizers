@@ -47,18 +47,46 @@ def expand_board_state(board: GameBoard, state: dict, player: int):
     """
     # Pass the board to the next player
     state = board.simulate_action(state, PASS())
-    # The player will put a village and a road block on his/her turn.
-    for coord in board.get_applicable_villages(player=player):
-        board.set_to_state(state)
+
+    if (player == board.get_player_id()):
+        #print the remaining setup order
+        #print(board.get_remaining_setup_order())
+        player_diversity = {}
+        best_coord = None
+        for coord in board.get_applicable_villages(player=player):
+            board.set_to_state(state)
+            diversity = board.diversity_of_place(coord)
+            if (len(board.get_remaining_setup_order()) > 3) and (len(diversity) == 3):
+                player_diversity = diversity
+                best_coord = coord
+                break
+            if len(diversity) > len(player_diversity):
+                player_diversity = diversity
+                best_coord = coord
+        #print('Best Coord:', best_coord, 'Diversity:', player_diversity)
         # Test all possible villages
-        village = VILLAGE(player, coord)
+        village = VILLAGE(player, best_coord)
         # Apply village construction for further construction
         board.simulate_action(state, village)
-       
-        for path_coord in board.get_applicable_roads_from(coord, player=player)[:1]:
+
+        for path_coord in board.get_applicable_roads_from(best_coord, player=player)[:1]:
             # Test all possible roads nearby that village
             road = ROAD(player, path_coord)
-            yield village, road, board.simulate_action(state, village, road)  # Yield this simulation result
+            yield village, road, board.simulate_action(state, village, road)
+
+    # The player will put a village and a road block on his/her turn.
+    else:
+        for coord in board.get_applicable_villages(player=player):
+            board.set_to_state(state)
+            # Test all possible villages
+            village = VILLAGE(player, coord)
+            # Apply village construction for further construction
+            board.simulate_action(state, village)
+        
+            for path_coord in board.get_applicable_roads_from(coord, player=player)[:1]:
+                # Test all possible roads nearby that village
+                road = ROAD(player, path_coord)
+                yield village, road, board.simulate_action(state, village, road)  # Yield this simulation result
 
 
 def cascade_expansion(board: GameBoard, state: dict, players: List[int]):
@@ -109,7 +137,6 @@ class Agent:  # Do not change the name of this class!
         error_cause = []
 
         #Added only one state for OR (DELETE WHEN PUSHING CODE)
-        i = 1
         for village, road, next_state in expand_board_state(board, state, player=player_id):
             try:
                 board.set_to_state(next_state)
@@ -119,8 +146,6 @@ class Agent:  # Do not change the name of this class!
             except:
                 error_cause.append(format_exc())
                 pass
-            if(i == 1):
-                break
 
         raise Exception('No solution exists: Errors on all AND children.\n [Cause]\n' + '\n'.join(error_cause) + '-' * 80)
 
