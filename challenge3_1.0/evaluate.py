@@ -32,8 +32,8 @@ from agents.load import get_all_agents
 MEGABYTES = 1024 ** 2
 #: The number of games to run the evaluation
 GAMES = 5
-#: LIMIT FOR A SINGLE EXECUTION, 13 minutes. (+- 3 minute for space)
-TIME_LIMIT = 60 * 13
+#: LIMIT FOR A SINGLE EXECUTION, 11 minutes. (+- 1 minute for space)
+TIME_LIMIT = 60 * 11
 #: LIMIT OF MEMORY USAGE, 1GB
 MEMORY_LIMIT = 1 * 1024 * MEGABYTES
 
@@ -144,6 +144,7 @@ if __name__ == '__main__':
 
     # Performance measures
     failures = defaultdict(list)  # This will be counted across different games
+    failure_counts = defaultdict(list)
     diversity_avg = defaultdict(list)  # This will be computed as average score
     mem_avg = defaultdict(list)  # This will be computed as average score
     time_avg = defaultdict(list)  # This will be computed as average score
@@ -156,12 +157,19 @@ if __name__ == '__main__':
         """
 
         # Print header
+        print('-' * 80)
         print(f'\nCurrent game trial: #{t}')
         print(f' AgentName    |  Failure?  Diversity  MemoryUsg  TimeSpent | Score ')
         print('=' * 14 + '|' + '=' * 44 + '|' + '=' * 30)
 
-        for agent, (is_failure, diversity, memory, time_spent) in last_execution.items():
+        for agent in all_agents:
+            if agent in last_execution:
+                is_failure, diversity, memory, time_spent = last_execution[agent]
+            else:
+                is_failure, diversity, memory, time_spent = 1, float('NaN'), float('NaN'), float('NaN')
+
             # Add items
+            failure_counts[agent].append(is_failure)
             if not math.isnan(diversity):
                 diversity_avg[agent].append(diversity)
             if not math.isnan(memory):
@@ -173,7 +181,7 @@ if __name__ == '__main__':
             key_print = agent if len(agent) < 13 else agent[:9] + '...'
 
             # Score computation
-            failure_score = min(10, len(failures[agent])) / min(10, t + 1)
+            failure_score = min(10, sum(failure_counts[agent])) / min(10, len(failure_counts[agent]))
             diversity_score = _average(diversity_avg[agent]) / 5
             memory_score = _average(mem_avg[agent], default=float('NaN'))
             time_score = _average(time_avg[agent], default=float('NaN'))
@@ -208,7 +216,7 @@ if __name__ == '__main__':
         return proc
 
 
-    def _read_result(res_queue, exceeds):
+    def _read_result(res_queue):
         """
         Read evaluation result from the queue.
         :param res_queue: Queue to read
@@ -216,11 +224,11 @@ if __name__ == '__main__':
         """
         while not res_queue.empty():
             agent_i, failure_i, div_i, mem_i, time_i = res_queue.get()
-            if failure_i is None and not (agent_i in exceeds):
+            if failure_i is None:
                 last_execution[agent_i] = 0, div_i, mem_i, time_i
             else:
                 last_execution[agent_i] = 1, float('NaN'), float('NaN'), float('NaN')
-                failures[agent_i].append(failure_i if failure_i else exceeds[agent_i])
+                failures[agent_i].append(failure_i)
 
 
     for trial in range(GAMES):
@@ -250,13 +258,18 @@ if __name__ == '__main__':
             for p, begin in processes:
                 if not p.is_alive():
                     continue
+
+                # Print running info
+                now = time()
+                print(f'Running "{p.agent}" for {now - begin:4.0f}/{TIME_LIMIT} second(s).', end='\r')
+
                 # For each running process, check for timeout
-                if begin + TIME_LIMIT < time():
+                if begin + TIME_LIMIT < now:
                     p.terminate()
                     exceed_limit[p.agent] = \
                         f'Process is running more than {TIME_LIMIT} sec, from ts={begin}; now={time()}'
-                    logging.info(f'[TIMEOUT] {p.agent} / '
-                                 f'Process is running more than {TIME_LIMIT} sec, from ts={begin}; now={time()}')
+                    logging.error(f'[TIMEOUT] {p.agent} / '
+                                  f'Process is running more than {TIME_LIMIT} sec, from ts={begin}; now={time()}')
                 else:
                     try:
                         p_bytes = pu.Process(p.pid).memory_info().rss
@@ -264,8 +277,8 @@ if __name__ == '__main__':
                             p.terminate()
                             exceed_limit[p.agent] = \
                                 f'Process consumed memory more than {MEMORY_LIMIT / MEGABYTES}MB (used: {p_bytes / MEGABYTES}MB)'
-                            logging.info(f'[MEM LIMIT] {p.agent} / '
-                                         f'Process consumed memory more than {MEMORY_LIMIT / MEGABYTES}MB (used: {p_bytes / MEGABYTES}MB)')
+                            logging.error(f'[MEM LIMIT] {p.agent} / '
+                                          f'Process consumed memory more than {MEMORY_LIMIT / MEGABYTES}MB (used: {p_bytes / MEGABYTES}MB)')
                         else:
                             new_proc_list.append((p, begin))
                     except pu.NoSuchProcess:
@@ -274,14 +287,18 @@ if __name__ == '__main__':
             # Prepare for the next round
             processes = new_proc_list
             # Read result from queue
-            _read_result(process_results, exceed_limit)
+            _read_result(process_results)
 
             # Wait for one seconds
             sleep(1)
 
         # Read results
         logging.info(f'Reading results at Trial {trial}')
-        _read_result(process_results, exceed_limit)
+        _read_result(process_results)
+
+        for agent_i, failure_i in exceed_limit.items():
+            last_execution[agent_i] = 1, float('NaN'), float('NaN'), float('NaN')
+            failures[agent_i].append(failure_i)
 
         # Sort the results for each performance criteria and give ranks to agents
         _print(trial)

@@ -85,7 +85,7 @@ class ROAD(Action):
         self.edge = tuple_to_path_coordinate(edge)
 
     def __repr__(self):  # String representation for this
-        return f'ROAD{tuple(self.edge)}'
+        return f'ROAD{tuple(self.edge)} of player {self.player_id}'
 
     def __call__(self, board):
         if IS_DEBUG:  # Logging for debugging
@@ -127,7 +127,7 @@ class VILLAGE(Action):
         self.node = tuple_to_coordinate(node)
 
     def __repr__(self):  # String representation for this
-        return f'VILLAGE{self.node}'
+        return f'VILLAGE{self.node} of player {self.player_id}'
 
     def __call__(self, board):
         if IS_DEBUG:  # Logging for debugging
@@ -168,7 +168,7 @@ class UPGRADE(Action):
         self.node = tuple_to_coordinate(node)
 
     def __repr__(self):  # String representation for this
-        return f'UPGRADE{self.node}'
+        return f'UPGRADE{self.node} of player {self.player_id}'
 
     def __call__(self, board):
         if IS_DEBUG:  # Logging for debugging
@@ -210,7 +210,7 @@ class TRADE(Action):
         self.request = Resource[request.upper()]
 
     def __repr__(self):  # String representation for this
-        return f'TRADE({self.given}xN->{self.request})'
+        return f'TRADE({self.given}xN->{self.request}) of player {self.player_id}'
 
     def __call__(self, board):
         if IS_DEBUG:  # Logging for debugging

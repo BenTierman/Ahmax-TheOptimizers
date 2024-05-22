@@ -297,7 +297,7 @@ class GameBoard:
             self._renderer.render_board()
 
         # Pick a setup turn randomly
-        self._player_number = random_integer(0, 4)
+        self._player_number = random_integer(0, 3)
         self._current_player = 0
         if IS_DEBUG:  # Logging for debug
             self._logger.debug(f'You\'re player {self._player_number}')
@@ -329,7 +329,7 @@ class GameBoard:
         """
         return self._setup_order
 
-    def run_initial_setup(self, players_policy: Dict[int, Callable[[str], Tuple[Action, Action]]]):
+    def run_initial_setup(self, players_policy: Dict[int, Callable[[dict], Tuple[Action, Action]]]):
         """
         Run the initial setup procedure, in the order of 1-2-3-4-4-3-2-1.
 
@@ -339,66 +339,52 @@ class GameBoard:
         state = self._initial
         self.reset_setup_order()
 
+        for player in range(4):
+            if player not in players_policy:
+                players_policy[player] = \
+                    self._one_resource_init_policy(self._rng.choice([Resource.BRICK, Resource.LUMBER]))
+
         while self._setup_order:
             # Move turn to the current player
             state = self.simulate_action(state, PASS())
+            policy = players_policy[self._current_player]
 
-            if self._current_player in players_policy:
-                policy = players_policy[self._current_player]
-            else:
-                policy = self._rng.choice([self._random_init, self._greedy_init])
-
-            act1, act2 = policy(self._current['state_id'])
-            assert isinstance(act1, VILLAGE), f'The first action should be a VILLAGE action, but received {type(act1)}'
-            assert isinstance(act2, ROAD), f'The second action should be a ROAD action, but received {type(act2)}'
+            act1, act2 = policy(self._current.copy())
+            assert isinstance(act1, VILLAGE), f'The first action should be a VILLAGE action, but received {type(act1)} for {self._current_player}'
+            assert isinstance(act2, ROAD), f'The second action should be a ROAD action, but received {type(act2)} for {self._current_player}'
 
             state = self.simulate_action(state, act1, act2)
 
         return state
 
-    def _random_init(self, state_id: str):
+    def _one_resource_init_policy(self, resource: Resource):
         """
-        Random initialization strategy for a player
+        Greedy initialization strategy for a player (Take a coordinate where maximizes the number of given resources)
         """
-        # Query all applicable nodes for the initial village.
-        applicable_nodes = self.get_applicable_villages()
-        # Choose a random node
-        chosen_node = self._rng.choice(list(applicable_nodes))
-        # Make the initial village(settlement)
-        village_act = VILLAGE(self._current_player, chosen_node)
-        # Apply village action for further construction
-        village_act(self)
 
-        # Query all applicable road options adjacent to the lastly built village
-        applicable_edges = self.get_applicable_roads_from(chosen_node)
-        # Choose a random edge
-        chosen_path = self._rng.choice(list(applicable_edges))
-        # Make the initial route
-        road_act = ROAD(self._current_player, chosen_path)
+        def policy(state: dict):
+            def _res_counter(coord):
+                return self._game.board.get_hex_resources_for_intersection(tuple_to_coordinate(coord)).get(resource, 0)
 
-        return village_act, road_act
+            # Query all applicable nodes for the initial village.
+            applicable_nodes = self.get_applicable_villages()
+            # Choose a random node
+            chosen_node = max(applicable_nodes, key=_res_counter)
+            # Make the initial village(settlement)
+            village_act = VILLAGE(self._current_player, chosen_node)
+            # Apply village action for further construction
+            village_act(self)
 
-    def _greedy_init(self, state_id: str):
-        """
-        Greedy initialization strategy for a player
-        """
-        # Query all applicable nodes for the initial village.
-        applicable_nodes = self.get_applicable_villages()
-        # Choose a random node
-        chosen_node = max(applicable_nodes, key=self.diversity_of_place)
-        # Make the initial village(settlement)
-        village_act = VILLAGE(self._current_player, chosen_node)
-        # Apply village action for further construction
-        village_act(self)
+            # Query all applicable road options adjacent to the lastly built village
+            applicable_edges = self.get_applicable_roads_from(chosen_node)
+            # Choose a random edge
+            chosen_path = max(applicable_edges, key=lambda path: max(_res_counter(c) for c in path))
+            # Make the initial route
+            road_act = ROAD(self._current_player, chosen_path)
 
-        # Query all applicable road options adjacent to the lastly built village
-        applicable_edges = self.get_applicable_roads_from(chosen_node)
-        # Choose a random edge
-        chosen_path = max(applicable_edges, key=self.diversity_of_road)
-        # Make the initial route
-        road_act = ROAD(self._current_player, chosen_path)
+            return village_act, road_act
 
-        return village_act, road_act
+        return policy
 
     def set_to_state(self, specific_state=None, is_initial: bool = False):
         """
@@ -760,12 +746,8 @@ class GameBoard:
                 raise ValueError('You need to execute VILLAGE, ROAD, or PASS actions during the initial phase')
 
         for act in actions:  # For each actions in the variable arguments,
-            try:
-                # Run actions through calling each action object
-                act(self)
-            except:
-                # If the action is forbidden, nothing happens.
-                pass
+            # Run actions through calling each action object. If error occurs, raise as it is.
+            act(self)
 
             # Break the loop if the game ends within executing actions.
             if not self._initial_phase and self.is_game_end():
@@ -838,7 +820,7 @@ class GameBoard:
                 continue
 
             yields = players_yields[player].total_yield
-            hex_types.update(yields.keys())
+            hex_types.update({key for key, value in yields.items() if value > 0})
 
         if IS_DEBUG:  # Logging for debug
             self._logger.debug(f'Hex types near this player: {hex_types}')

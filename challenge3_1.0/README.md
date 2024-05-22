@@ -179,7 +179,7 @@ You can perceive the game state, during the search, as follows:
 
 You cannot access the board when executing your plan. The only thing that your program can access is:
 
-- The state ID (상태 ID 번호)
+- The current board state (현재 보드의 상태)
 
 
 ## Structure of evaluation system
