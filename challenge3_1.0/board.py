@@ -811,7 +811,7 @@ class GameBoard:
         self.set_to_state(state)
 
         # Get the current number of cards
-        player = self._game.players[self._current_player]
+        player = self._game.players[self._player_number]
         # Evaluate the expected resource income
         hex_types = set()
         for roll, prob in DICE_ROLL.items():
