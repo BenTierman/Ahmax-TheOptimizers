@@ -51,18 +51,29 @@ def expand_board_state(board: GameBoard, state: dict, player: int):
     if (player == board.get_player_id()):
         #print the remaining setup order
         #print(board.get_remaining_setup_order())
-        player_diversity = {}
+        player_diversity = set()
         best_coord = None
+        max_new_items = 0
+        if len(board.get_remaining_setup_order()) <= 3:
+            player_settlement = [coord for coord, value in state["board"]["intersections"].items() if value["type"] == "SETTLEMENT" and value["owner"] == player]
+            player_diversity = board.diversity_of_place(player_settlement[0])
+
         for coord in board.get_applicable_villages(player=player):
             board.set_to_state(state)
             diversity = board.diversity_of_place(coord)
             if (len(board.get_remaining_setup_order()) > 3) and (len(diversity) == 3):
-                player_diversity = diversity
+                player_diversity.update(diversity)
                 best_coord = coord
                 break
-            if len(diversity) > len(player_diversity):
-                player_diversity = diversity
+
+            new_items = diversity - player_diversity
+            num_new_items = len(new_items)
+
+            if num_new_items > max_new_items:
+                max_new_items = num_new_items
+                player_diversity.update(diversity)
                 best_coord = coord
+                
         #print('Best Coord:', best_coord, 'Diversity:', player_diversity)
         # Test all possible villages
         village = VILLAGE(player, best_coord)
