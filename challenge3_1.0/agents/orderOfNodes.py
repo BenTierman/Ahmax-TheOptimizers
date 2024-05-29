@@ -49,24 +49,18 @@ def expand_board_state(board: GameBoard, state: dict, player: int):
     state = board.simulate_action(state, PASS())
 
     if (player == board.get_player_id()):
-        #print the remaining setup order
-        #print(board.get_remaining_setup_order())
-        player_diversity = set()
-        temp_diversity = set()
-        max_diversity = set()
+        player_diversity, temp_diversity, max_diversity = set(), set(), set()
         best_coord = None
         if len(board.get_remaining_setup_order()) <= 3:
             player_settlement = [coord for coord, value in state["board"]["intersections"].items() if value["type"] == "SETTLEMENT" and value["owner"] == player]
             player_diversity = board.diversity_of_place(player_settlement[0])
-            #print('Player Diversity:', player_diversity)
 
         for coord in board.get_applicable_villages(player=player):
             board.set_to_state(state)
             diversity = board.diversity_of_place(coord)
-            #print('Diversity:', diversity)
             if (len(board.get_remaining_setup_order()) > 3) and (len(diversity) == 3):
-                temp_diversity.clear()
-                player_diversity.update(diversity)
+                max_diversity.clear()
+                max_diversity.update(diversity)
                 best_coord = coord
                 break
             
@@ -79,7 +73,6 @@ def expand_board_state(board: GameBoard, state: dict, player: int):
                 best_coord = coord
                 
         player_diversity.update(max_diversity)
-        #print('Best Coord:', best_coord, 'Diversity:', player_diversity)
         # Test all possible villages
         village = VILLAGE(player, best_coord)
         # Apply village construction for further construction
@@ -123,11 +116,9 @@ def cascade_expansion(board: GameBoard, state: dict, players: List[int]):
     current_player = players[0]
     next_players = players[1:]
     current_order = board.get_remaining_setup_order()
-    #print (players)
 
 
     i=1
-    # print('Current Player:', current_player)
     for _, _, next_state in expand_board_state(board, state, current_player):
         board.reset_setup_order(current_order[1:])
         for next_next_state in cascade_expansion(board, next_state, next_players):
@@ -160,7 +151,6 @@ class Agent:  # Do not change the name of this class!
 
         #Added only one state for OR (DELETE WHEN PUSHING CODE)
         i=1
-        # print("here")
         for village, road, next_state in expand_board_state(board, state, player=player_id):
             try:
                 board.set_to_state(next_state)
@@ -188,9 +178,6 @@ class Agent:  # Do not change the name of this class!
         players_turn = remaining_order.index(player_id)
         before_player = remaining_order[:players_turn]
         order_from_player = remaining_order[players_turn:]
-        # print("before_player", before_player)
-        # print("order_from_player", order_from_player)
-        # print("players_turn", players_turn)
 
         if before_player:
             path = path + [state['state_id']]
